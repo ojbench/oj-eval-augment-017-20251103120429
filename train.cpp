@@ -34,6 +34,8 @@ int trains_add(const Train &src){
     trains[idx].segments = trains[idx].stationNum-1;
     trains[idx].dayCount = trains[idx].saleEnd - trains[idx].saleStart + 1;
     trains[idx].seats=nullptr;
+    trains[idx].pendHead=nullptr;
+    trains[idx].pendTail=nullptr;
     precompute_times(trains[idx]);
     unsigned long long hv = hstr(src.id)%HASH_SIZE;
     nxt[idx]=head[hv]; head[hv]=idx;
@@ -49,6 +51,9 @@ bool trains_release(const std::string &id){
     long long total = (long long)days * segs;
     t.seats = new int[total];
     for (long long i=0;i<total;++i) t.seats[i]=t.seatNum;
+    t.pendHead = new int[days];
+    t.pendTail = new int[days];
+    for(int i=0;i<days;++i){ t.pendHead[i]=-1; t.pendTail[i]=-1; }
     t.released = true;
     return true;
 }

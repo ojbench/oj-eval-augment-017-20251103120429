@@ -21,6 +21,8 @@ struct Train {
     int dayCount; // saleEnd - saleStart + 1
     int segments; // stationNum-1
     int *seats;   // size dayCount*segments, only after release
+    int *pendHead; // per-day pending order head (order idx)
+    int *pendTail; // per-day pending order tail
 };
 
 void trains_init();

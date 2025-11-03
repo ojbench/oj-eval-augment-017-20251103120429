@@ -13,6 +13,7 @@ struct Order {
     int baseStartDay; // start date for station 1
     int status; // 0=pending,1=success,2=refunded
     int next; // for per-user linked list (newest first)
+    int nextPending; // for per-train-day pending queue
 };
 
 void orders_init(int maxUsers);

@@ -24,6 +24,19 @@ static void print_time(const Train &t,int baseStartDay,int stationIdx,bool arriv
 }
 
 static int sum_prices(const Train &t,int l,int r){ int s=0; for(int i=l;i<=r;++i) s+=t.prices[i]; return s; }
+static void enqueue_pending(Train &t,int baseStartDay,int oid){
+    int di=baseStartDay - t.saleStart; if(di<0||di>=t.dayCount) return; Order &o=orders_get_mut(oid); o.nextPending=-1; if(t.pendHead[di]==-1){ t.pendHead[di]=t.pendTail[di]=oid; } else { orders_get_mut(t.pendTail[di]).nextPending=oid; t.pendTail[di]=oid; }
+}
+static void process_pending_for_day(Train &t,int baseStartDay){
+    int di=baseStartDay - t.saleStart; if(di<0||di>=t.dayCount) return; int cur=t.pendHead[di], prev=-1; while(cur!=-1){ Order &o=orders_get_mut(cur); int can=seats_min(t,baseStartDay,o.fromIdx,o.toIdx-1); int nxt=o.nextPending; if(o.status==0 && can>=o.num){ seats_add(t,baseStartDay,o.fromIdx,o.toIdx-1,-o.num); o.status=1; // remove from queue
+            if(prev==-1) t.pendHead[di]=nxt; else orders_get_mut(prev).nextPending=nxt; if(t.pendTail[di]==cur) t.pendTail[di]=prev; }
+        else prev=cur; cur=nxt; }
+}
+
+static bool compute_transfer(const Train &A,int baseA,int sIdx,int xIdx,const Train &B,int xIdxB,int tIdx,int &baseB, long long &totalTime){
+    if (&A==&B) return false; int arrAX=A.arr[xIdx]; int depAS=A.dep[sIdx]; long long absArrA=(long long)baseA*1440 + arrAX; int depBX=B.dep[xIdxB]; int offBX=depBX/1440; int timeBX=depBX%1440; long long arrDayA=absArrA/1440; int arrTimeA=absArrA%1440; long long boardDayB = arrDayA + (timeBX>=arrTimeA?0:1);
+    baseB = (int)(boardDayB - offBX); if(baseB < B.saleStart || baseB > B.saleEnd) return false; long long absDepA=(long long)baseA*1440 + depAS; long long absArrB=(long long)baseB*1440 + B.arr[tIdx]; totalTime = absArrB - absDepA; return totalTime>=0; }
+
 
 int main(){ios::sync_with_stdio(false);cin.tie(nullptr);
     users_init(); trains_init(); orders_init(50000);
@@ -85,23 +98,65 @@ int main(){ios::sync_with_stdio(false);cin.tie(nullptr);
             cout<<ac<<'\n';
             for(int k=0;k<ac;++k){ Train &t=trains_get(arr[k].idx); cout<<t.id<<' '<<t.stations[arr[k].si]<<' '; print_time(t,arr[k].base,arr[k].si,false); cout<<" -> "<<t.stations[arr[k].ti]<<' '; print_time(t,arr[k].base,arr[k].ti,true); cout<<' '<<arr[k].price<<' '<<arr[k].seat<<'\n'; }
         } else if(cmd=="query_transfer"){
-            cout<<0<<'\n';
+            string s=getArg(line,'s'), tt=getArg(line,'t'), d=getArg(line,'d'); string pp=getArg(line,'p'); bool sortTime = (pp=="time"||pp.empty()); int day=dayIndexFromMMDD(d);
+            bool has=false; int bestAi=-1,bestBi=-1,bestBaseA=0,bestBaseB=0,bestSi=0,bestXi=0,bestTi=0; long long bestTime=0; int bestPrice=0; int bestRideA=0;
+            for(int ai=0; ai<trains_count(); ++ai){ Train &A=trains_get(ai); if(!A.valid||!A.released) continue; int si=station_index(A,s); if(si==-1) continue; int baseA; if(!compute_base_start_day_for_boarding(A,si,day,baseA)) continue; for(int xi=si+1; xi<=A.stationNum; ++xi){ // transfer station must be before end
+                    for(int bi=0; bi<trains_count(); ++bi){ Train &B=trains_get(bi); if(!B.valid||!B.released) continue; if(ai==bi) continue; int xib=station_index(B,A.stations[xi]); int ti=station_index(B,tt); if(xib==-1||ti==-1||xib>=ti) continue; int baseB; long long totTime; if(!compute_transfer(A,baseA,si,xi,B,xib,ti,baseB,totTime)) continue; int priceA=sum_prices(A,si,xi-1); int priceB=sum_prices(B,xib,ti-1); int totalPrice=priceA+priceB; int rideA=A.arr[xi]-A.dep[si];
+                        bool better=false;
+                        if(!has) better=true;
+                        else if(sortTime){
+                            if(totTime<bestTime) better=true;
+                            else if(totTime==bestTime){
+                                if(rideA<bestRideA) better=true;
+                                else if(rideA==bestRideA){
+                                    int c=cmpStr(A.id, trains_get(bestAi).id);
+                                    if(c<0) better=true;
+                                    else if(c==0 && cmpStr(B.id, trains_get(bestBi).id)<0) better=true;
+                                }
+                            }
+                        } else {
+                            if(totalPrice<bestPrice) better=true;
+                            else if(totalPrice==bestPrice){
+                                if(rideA<bestRideA) better=true;
+                                else if(rideA==bestRideA){
+                                    int c=cmpStr(A.id, trains_get(bestAi).id);
+                                    if(c<0) better=true;
+                                    else if(c==0 && cmpStr(B.id, trains_get(bestBi).id)<0) better=true;
+                                }
+                            }
+                        }
+                        if(better){ has=true; bestAi=ai; bestBi=bi; bestBaseA=baseA; bestBaseB=baseB; bestSi=si; bestXi=xi; bestTi=ti; bestTime=totTime; bestPrice=totalPrice; bestRideA=rideA; }
+                }
+                }
+
+            }
+            if(!has){ cout<<0<<'\n'; }
+            else{
+                Train &A=trains_get(bestAi); Train &B=trains_get(bestBi); int seatA=seats_min(A,bestBaseA,bestSi,bestXi-1); int seatB=seats_min(B,bestBaseB,station_index(B,A.stations[bestXi]),bestTi-1); int priceA=sum_prices(A,bestSi,bestXi-1); int priceB=sum_prices(B,station_index(B,A.stations[bestXi]),bestTi-1);
+                cout<<A.id<<' '<<A.stations[bestSi]<<' '; print_time(A,bestBaseA,bestSi,false); cout<<" -> "<<A.stations[bestXi]<<' '; print_time(A,bestBaseA,bestXi,true); cout<<' '<<priceA<<' '<<seatA<<'\n';
+                cout<<B.id<<' '<<A.stations[bestXi]<<' '; print_time(B,bestBaseB,station_index(B,A.stations[bestXi]),false); cout<<" -> "<<B.stations[bestTi]<<' '; print_time(B,bestBaseB,bestTi,true); cout<<' '<<priceB<<' '<<seatB<<'\n';
+            }
         } else if(cmd=="buy_ticket"){
             string u=getArg(line,'u'), id=getArg(line,'i'), d=getArg(line,'d'), nf=getArg(line,'n'), fs=getArg(line,'f'), ts=getArg(line,'t'); string q=getArg(line,'q'); int ui=users_find(u); if(ui==-1||!users_get(ui).loggedIn){ cout<<-1<<'\n'; continue;} int ti=trains_find(id); if(ti==-1){ cout<<-1<<'\n'; continue;} Train &tr=trains_get(ti); if(!tr.released){ cout<<-1<<'\n'; continue; }
             int si=station_index(tr,fs), ei=station_index(tr,ts); if(si==-1||ei==-1||si>=ei){ cout<<-1<<'\n'; continue; } int n=toInt(nf); if(n<=0||n>tr.seatNum){ cout<<-1<<'\n'; continue; }
             int day=dayIndexFromMMDD(d); int base; if(!compute_base_start_day_for_boarding(tr,si,day,base)){ cout<<-1<<'\n'; continue; }
             int seat=seats_min(tr,base,si,ei-1); int price=sum_prices(tr,si,ei-1)*n;
             if(seat>=n){ seats_add(tr,base,si,ei-1,-n); order_create(ui,ti,si,ei,n,price,day,base,1); cout<<price<<'\n'; }
-            else if(q=="true"){ if(n>tr.seatNum){ cout<<-1<<'\n'; } else { order_create(ui,ti,si,ei,n,price,day,base,0); cout<<"queue\n"; } }
+            else if(q=="true"){ if(n>tr.seatNum){ cout<<-1<<'\n'; } else { int oid=order_create(ui,ti,si,ei,n,price,day,base,0); enqueue_pending(tr,base,oid); cout<<"queue\n"; } }
             else cout<<-1<<'\n';
         } else if(cmd=="query_order"){
             string u=getArg(line,'u'); int ui=users_find(u); if(ui==-1||!users_get(ui).loggedIn){ cout<<-1<<'\n'; continue;} int head=user_order_head(ui); int cnt=0; for(int x=head;x!=-1;x=orders_get(x).next) ++cnt; cout<<cnt<<'\n'; for(int x=head;x!=-1;x=orders_get(x).next){ const Order &o=orders_get(x); const Train &t=trains_get(o.trainIdx); string st = (o.status==1?"success":(o.status==0?"pending":"refunded")); cout<<'['<<st<<"] "<<t.id<<' '<<t.stations[o.fromIdx]<<' '; print_time(t,o.baseStartDay,o.fromIdx,false); cout<<" -> "<<t.stations[o.toIdx]<<' '; print_time(t,o.baseStartDay,o.toIdx,true); cout<<' '<<o.price<<' '<<o.num<<'\n'; }
         } else if(cmd=="refund_ticket"){
             string u=getArg(line,'u'); string nn=getArg(line,'n'); int nth = nn.empty()?1:toInt(nn); int ui=users_find(u); if(ui==-1||!users_get(ui).loggedIn||nth<=0){ cout<<-1<<'\n'; continue;} int x=user_order_head(ui); int prev=-1; for(int i=1;i<nth && x!=-1;++i){ prev=x; x=orders_get(x).next; }
-            if(x==-1){ cout<<-1<<'\n'; continue;} Order &o=orders_get_mut(x); if(o.status==2){ cout<<-1<<'\n'; continue;} if(o.status==1){ // success -> refund seats
-                Train &t=trains_get(o.trainIdx); seats_add(t,o.baseStartDay,o.fromIdx,o.toIdx-1,o.num);
+            if(x==-1){ cout<<-1<<'\n'; continue;} Order &o=orders_get_mut(x); if(o.status==2){ cout<<-1<<'\n'; continue;} Train &t=trains_get(o.trainIdx); if(o.status==1){ // success -> refund seats
+                seats_add(t,o.baseStartDay,o.fromIdx,o.toIdx-1,o.num);
+            } else if(o.status==0) {
+                // remove from pending queue
+                int di=o.baseStartDay - t.saleStart; int cur=t.pendHead[di], prevq=-1; while(cur!=-1){ if(cur==x){ int nxt=orders_get_mut(cur).nextPending; if(prevq==-1) t.pendHead[di]=nxt; else orders_get_mut(prevq).nextPending=nxt; if(t.pendTail[di]==cur) t.pendTail[di]=prevq; break;} prevq=cur; cur=orders_get(cur).nextPending; }
             }
             o.status=2; cout<<0<<'\n';
+            if(o.status==2){ process_pending_for_day(t,o.baseStartDay); }
+
         } else if(cmd=="clean"){
             users_init(); trains_init(); orders_init(50000); cout<<0<<'\n';
         } else if(cmd=="exit"){

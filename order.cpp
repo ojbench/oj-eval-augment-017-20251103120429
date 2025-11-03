@@ -27,6 +27,7 @@ int order_create(int userIdx, int trainIdx, int fromIdx, int toIdx, int num, int
     orders[idx].baseStartDay=baseStartDay;
     orders[idx].status=status;
     orders[idx].next = user_head[userIdx];
+    orders[idx].nextPending = -1;
     user_head[userIdx] = idx;
     return idx;
 }
