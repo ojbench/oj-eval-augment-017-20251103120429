@@ -1,4 +1,8 @@
 #include <iostream>
+#include <cstdio>
+
+#include <fstream>
+
 #include <string>
 #include "util.h"
 #include "user.h"
@@ -38,42 +42,41 @@ static bool compute_transfer(const Train &A,int baseA,int sIdx,int xIdx,const Tr
     baseB = (int)(boardDayB - offBX); if(baseB < B.saleStart || baseB > B.saleEnd) return false; long long absDepA=(long long)baseA*1440 + depAS; long long absArrB=(long long)baseB*1440 + B.arr[tIdx]; totalTime = absArrB - absDepA; return totalTime>=0; }
 
 
-int main(){ios::sync_with_stdio(false);cin.tie(nullptr);
-    users_init(); trains_init(); orders_init(50000);
-    string line; while (getline(cin,line)){
-        if(line.empty()) continue; if(line[0]=='>'){/*ignore prompt*/}
-        string cmd; { size_t p=line.find(' '); cmd = (p==string::npos)?line:line.substr(0,p); }
-        if(cmd=="add_user"){
+static void append_log(const string &line){ FILE *f=fopen("ops.log","ab"); if(!f) return; fwrite(line.c_str(),1,line.size(),f); fwrite("\n",1,1,f); fclose(f);}
+
+static void handle_line(const string &line, bool fromLog){
+    if(line.empty()) return; string cmd; { size_t p=line.find(' '); cmd = (p==string::npos)?line:line.substr(0,p); }
+    if(cmd=="add_user"){
             string cu=getArg(line,'c'), u=getArg(line,'u'), p=getArg(line,'p'), n=getArg(line,'n'), m=getArg(line,'m'), g=getArg(line,'g');
-            if(users_count()==0){ if(u.empty()||p.empty()||n.empty()||m.empty()){ cout<<-1<<'\n'; continue;} int ok=users_add(u,p,n,m,10); cout<<(ok==-1?-1:0)<<'\n'; }
+            if(users_count()==0){ if(u.empty()||p.empty()||n.empty()||m.empty()){ cout<<-1<<'\n'; return;} int ok=users_add(u,p,n,m,10); if(ok!=-1 && !fromLog) append_log(line); cout<<(ok==-1?-1:0)<<'\n'; }
             else{
-                int ci=users_find(cu); int ni=users_find(u); if(ci==-1||!users_get(ci).loggedIn||!g.size()||u.empty()||p.empty()||n.empty()||m.empty()||ni!=-1){ cout<<-1<<'\n'; continue; }
-                if(toInt(g) >= users_get(ci).privilege){ cout<<-1<<'\n'; continue; }
-                int ok=users_add(u,p,n,m,toInt(g)); cout<<(ok==-1?-1:0)<<'\n';
+                int ci=users_find(cu); int ni=users_find(u); if(ci==-1||!users_get(ci).loggedIn||!g.size()||u.empty()||p.empty()||n.empty()||m.empty()||ni!=-1){ cout<<-1<<'\n'; return; }
+                if(toInt(g) >= users_get(ci).privilege){ cout<<-1<<'\n'; return; }
+                int ok=users_add(u,p,n,m,toInt(g)); if(ok!=-1 && !fromLog) append_log(line); cout<<(ok==-1?-1:0)<<'\n';
             }
         } else if(cmd=="login"){
             string u=getArg(line,'u'), p=getArg(line,'p'); bool ok = (!u.empty() && !p.empty() && users_login(u,p)); cout<<(ok?0:-1)<<'\n';
         } else if(cmd=="logout"){
             string u=getArg(line,'u'); bool ok = (!u.empty() && users_logout(u)); cout<<(ok?0:-1)<<'\n';
         } else if(cmd=="query_profile"){
-            string cu=getArg(line,'c'), u=getArg(line,'u'); int ci=users_find(cu), ui=users_find(u); if(ci==-1||ui==-1||!users_get(ci).loggedIn){ cout<<-1<<'\n'; continue;} User &C=users_get(ci), &U=users_get(ui); if(!(C.privilege>U.privilege || ci==ui)){ cout<<-1<<'\n'; continue;} cout<<U.username<<' '<<U.name<<' '<<U.mail<<' '<<U.privilege<<'\n';
+            string cu=getArg(line,'c'), u=getArg(line,'u'); int ci=users_find(cu), ui=users_find(u); if(ci==-1||ui==-1||!users_get(ci).loggedIn){ cout<<-1<<'\n'; return;} User &C=users_get(ci), &U=users_get(ui); if(!(C.privilege>U.privilege || ci==ui)){ cout<<-1<<'\n'; return;} cout<<U.username<<' '<<U.name<<' '<<U.mail<<' '<<U.privilege<<'\n';
         } else if(cmd=="modify_profile"){
-            string cu=getArg(line,'c'), u=getArg(line,'u'); int ci=users_find(cu), ui=users_find(u); if(ci==-1||ui==-1||!users_get(ci).loggedIn){ cout<<-1<<'\n'; continue;} User &C=users_get(ci), &U=users_get(ui); if(!(C.privilege>U.privilege || ci==ui)){ cout<<-1<<'\n'; continue;} string np=getArg(line,'p'), nn=getArg(line,'n'), nm=getArg(line,'m'), ng=getArg(line,'g'); if(ng.size() && toInt(ng)>=C.privilege){ cout<<-1<<'\n'; continue;} if(np.size()) U.password=np; if(nn.size()) U.name=nn; if(nm.size()) U.mail=nm; if(ng.size()) U.privilege=toInt(ng); cout<<U.username<<' '<<U.name<<' '<<U.mail<<' '<<U.privilege<<'\n';
+            string cu=getArg(line,'c'), u=getArg(line,'u'); int ci=users_find(cu), ui=users_find(u); if(ci==-1||ui==-1||!users_get(ci).loggedIn){ cout<<-1<<'\n'; return;} User &C=users_get(ci), &U=users_get(ui); if(!(C.privilege>U.privilege || ci==ui)){ cout<<-1<<'\n'; return;} string np=getArg(line,'p'), nn=getArg(line,'n'), nm=getArg(line,'m'), ng=getArg(line,'g'); if(ng.size() && toInt(ng)>=C.privilege){ cout<<-1<<'\n'; return;} if(np.size()) U.password=np; if(nn.size()) U.name=nn; if(nm.size()) U.mail=nm; if(ng.size()) U.privilege=toInt(ng); if(!fromLog) append_log(line); cout<<U.username<<' '<<U.name<<' '<<U.mail<<' '<<U.privilege<<'\n';
         } else if(cmd=="add_train"){
             Train t; t.id=getArg(line,'i'); string sn=getArg(line,'n'), sm=getArg(line,'m'); string ss=getArg(line,'s'), sp=getArg(line,'p'), sx=getArg(line,'x'), st=getArg(line,'t'), so=getArg(line,'o'), sd=getArg(line,'d'); string sy=getArg(line,'y');
-            if(t.id.empty()||sn.empty()||sm.empty()||ss.empty()||sp.empty()||sx.empty()||st.empty()||sd.empty()||sy.empty()){ cout<<-1<<'\n'; continue; }
+            if(t.id.empty()||sn.empty()||sm.empty()||ss.empty()||sp.empty()||sx.empty()||st.empty()||sd.empty()||sy.empty()){ cout<<-1<<'\n'; return; }
             t.stationNum=toInt(sn); t.seatNum=toInt(sm); t.startTime=parseHHMM(sx); t.type=sy[0]; string sdv[3]; split(sd,'|',sdv,3); t.saleStart=dayIndexFromMMDD(sdv[0]); t.saleEnd=dayIndexFromMMDD(sdv[1]);
             string ssv[110]; string spv[110]; string stv[110]; string sov[110]; int ns=split(ss,'|',ssv,110); int np=split(sp,'|',spv,110); int nt=split(st,'|',stv,110); int no=0; if(so=="_") no=0; else no=split(so,'|',sov,110);
             bool ok=true; if(ns!=t.stationNum||np!=t.stationNum-1||nt!=t.stationNum-1||(!(t.stationNum==2?no==0:no==t.stationNum-2))){ ok=false; }
-            if(!ok||t.stationNum<2||t.seatNum<=0){ cout<<-1<<'\n'; continue; }
+            if(!ok||t.stationNum<2||t.seatNum<=0){ cout<<-1<<'\n'; return; }
             for(int i=1;i<=t.stationNum;++i) t.stations[i]=ssv[i-1];
             for(int i=1;i<=t.stationNum-1;++i){ t.prices[i]=toInt(spv[i-1]); t.travel[i]=toInt(stv[i-1]); }
             for(int i=2;i<=t.stationNum-1;++i){ t.stopover[i-1]= (no?toInt(sov[i-2]):0); }
-            int idx=trains_add(t); cout<<(idx==-1?-1:0)<<'\n';
+            int idx=trains_add(t); if(idx!=-1 && !fromLog) append_log(line); cout<<(idx==-1?-1:0)<<'\n';
         } else if(cmd=="release_train"){
-            string id=getArg(line,'i'); bool ok = (!id.empty() && trains_release(id)); cout<<(ok?0:-1)<<'\n';
+            string id=getArg(line,'i'); bool ok = (!id.empty() && trains_release(id)); if(ok && !fromLog) append_log(line); cout<<(ok?0:-1)<<'\n';
         } else if(cmd=="query_train"){
-            string id=getArg(line,'i'), d=getArg(line,'d'); int idx=trains_find(id); if(idx==-1){ cout<<-1<<'\n'; continue;} Train &t=trains_get(idx); int base=dayIndexFromMMDD(d); if(base<t.saleStart||base>t.saleEnd){ cout<<-1<<'\n'; continue; }
+            string id=getArg(line,'i'), d=getArg(line,'d'); int idx=trains_find(id); if(idx==-1){ cout<<-1<<'\n'; return;} Train &t=trains_get(idx); int base=dayIndexFromMMDD(d); if(base<t.saleStart||base>t.saleEnd){ cout<<-1<<'\n'; return; }
             cout<<t.id<<' '<<t.type<<'\n';
             for(int i=1;i<=t.stationNum;++i){
                 cout<<t.stations[i]<<' ';
@@ -85,7 +88,7 @@ int main(){ios::sync_with_stdio(false);cin.tie(nullptr);
                 }
             }
         } else if(cmd=="delete_train"){
-            string id=getArg(line,'i'); bool ok = (!id.empty() && trains_delete(id)); cout<<(ok?0:-1)<<'\n';
+            string id=getArg(line,'i'); bool ok = (!id.empty() && trains_delete(id)); if(ok && !fromLog) append_log(line); cout<<(ok?0:-1)<<'\n';
         } else if(cmd=="query_ticket"){
             string s=getArg(line,'s'), tt=getArg(line,'t'), d=getArg(line,'d'); string pp=getArg(line,'p'); bool sortTime = (pp=="time"||pp.empty()); int day=dayIndexFromMMDD(d);
             struct Item{int idx,base,si,ti,price,seat,time;}; Item arr[4000]; int ac=0;
@@ -137,31 +140,45 @@ int main(){ios::sync_with_stdio(false);cin.tie(nullptr);
                 cout<<B.id<<' '<<A.stations[bestXi]<<' '; print_time(B,bestBaseB,station_index(B,A.stations[bestXi]),false); cout<<" -> "<<B.stations[bestTi]<<' '; print_time(B,bestBaseB,bestTi,true); cout<<' '<<priceB<<' '<<seatB<<'\n';
             }
         } else if(cmd=="buy_ticket"){
-            string u=getArg(line,'u'), id=getArg(line,'i'), d=getArg(line,'d'), nf=getArg(line,'n'), fs=getArg(line,'f'), ts=getArg(line,'t'); string q=getArg(line,'q'); int ui=users_find(u); if(ui==-1||!users_get(ui).loggedIn){ cout<<-1<<'\n'; continue;} int ti=trains_find(id); if(ti==-1){ cout<<-1<<'\n'; continue;} Train &tr=trains_get(ti); if(!tr.released){ cout<<-1<<'\n'; continue; }
-            int si=station_index(tr,fs), ei=station_index(tr,ts); if(si==-1||ei==-1||si>=ei){ cout<<-1<<'\n'; continue; } int n=toInt(nf); if(n<=0||n>tr.seatNum){ cout<<-1<<'\n'; continue; }
-            int day=dayIndexFromMMDD(d); int base; if(!compute_base_start_day_for_boarding(tr,si,day,base)){ cout<<-1<<'\n'; continue; }
+            string u=getArg(line,'u'), id=getArg(line,'i'), d=getArg(line,'d'), nf=getArg(line,'n'), fs=getArg(line,'f'), ts=getArg(line,'t'); string q=getArg(line,'q'); int ui=users_find(u); if(ui==-1||!users_get(ui).loggedIn){ cout<<-1<<'\n'; return;} int ti=trains_find(id); if(ti==-1){ cout<<-1<<'\n'; return;} Train &tr=trains_get(ti); if(!tr.released){ cout<<-1<<'\n'; return; }
+            int si=station_index(tr,fs), ei=station_index(tr,ts); if(si==-1||ei==-1||si>=ei){ cout<<-1<<'\n'; return; } int n=toInt(nf); if(n<=0||n>tr.seatNum){ cout<<-1<<'\n'; return; }
+            int day=dayIndexFromMMDD(d); int base; if(!compute_base_start_day_for_boarding(tr,si,day,base)){ cout<<-1<<'\n'; return; }
             int seat=seats_min(tr,base,si,ei-1); int price=sum_prices(tr,si,ei-1)*n;
-            if(seat>=n){ seats_add(tr,base,si,ei-1,-n); order_create(ui,ti,si,ei,n,price,day,base,1); cout<<price<<'\n'; }
-            else if(q=="true"){ if(n>tr.seatNum){ cout<<-1<<'\n'; } else { int oid=order_create(ui,ti,si,ei,n,price,day,base,0); enqueue_pending(tr,base,oid); cout<<"queue\n"; } }
+            if(seat>=n){ seats_add(tr,base,si,ei-1,-n); order_create(ui,ti,si,ei,n,price,day,base,1); if(!fromLog) append_log(line); cout<<price<<'\n'; }
+            else if(q=="true"){ if(n>tr.seatNum){ cout<<-1<<'\n'; } else { int oid=order_create(ui,ti,si,ei,n,price,day,base,0); enqueue_pending(tr,base,oid); if(!fromLog) append_log(line); cout<<"queue\n"; } }
             else cout<<-1<<'\n';
         } else if(cmd=="query_order"){
-            string u=getArg(line,'u'); int ui=users_find(u); if(ui==-1||!users_get(ui).loggedIn){ cout<<-1<<'\n'; continue;} int head=user_order_head(ui); int cnt=0; for(int x=head;x!=-1;x=orders_get(x).next) ++cnt; cout<<cnt<<'\n'; for(int x=head;x!=-1;x=orders_get(x).next){ const Order &o=orders_get(x); const Train &t=trains_get(o.trainIdx); string st = (o.status==1?"success":(o.status==0?"pending":"refunded")); cout<<'['<<st<<"] "<<t.id<<' '<<t.stations[o.fromIdx]<<' '; print_time(t,o.baseStartDay,o.fromIdx,false); cout<<" -> "<<t.stations[o.toIdx]<<' '; print_time(t,o.baseStartDay,o.toIdx,true); cout<<' '<<o.price<<' '<<o.num<<'\n'; }
+            string u=getArg(line,'u'); int ui=users_find(u); if(ui==-1||!users_get(ui).loggedIn){ cout<<-1<<'\n'; return;} int head=user_order_head(ui); int cnt=0; for(int x=head;x!=-1;x=orders_get(x).next) ++cnt; cout<<cnt<<'\n'; for(int x=head;x!=-1;x=orders_get(x).next){ const Order &o=orders_get(x); const Train &t=trains_get(o.trainIdx); string st = (o.status==1?"success":(o.status==0?"pending":"refunded")); cout<<'['<<st<<"] "<<t.id<<' '<<t.stations[o.fromIdx]<<' '; print_time(t,o.baseStartDay,o.fromIdx,false); cout<<" -> "<<t.stations[o.toIdx]<<' '; print_time(t,o.baseStartDay,o.toIdx,true); cout<<' '<<o.price<<' '<<o.num<<'\n'; }
         } else if(cmd=="refund_ticket"){
-            string u=getArg(line,'u'); string nn=getArg(line,'n'); int nth = nn.empty()?1:toInt(nn); int ui=users_find(u); if(ui==-1||!users_get(ui).loggedIn||nth<=0){ cout<<-1<<'\n'; continue;} int x=user_order_head(ui); int prev=-1; for(int i=1;i<nth && x!=-1;++i){ prev=x; x=orders_get(x).next; }
-            if(x==-1){ cout<<-1<<'\n'; continue;} Order &o=orders_get_mut(x); if(o.status==2){ cout<<-1<<'\n'; continue;} Train &t=trains_get(o.trainIdx); if(o.status==1){ // success -> refund seats
+            string u=getArg(line,'u'); string nn=getArg(line,'n'); int nth = nn.empty()?1:toInt(nn); int ui=users_find(u); if(ui==-1||!users_get(ui).loggedIn||nth<=0){ cout<<-1<<'\n'; return;} int x=user_order_head(ui); int prev=-1; for(int i=1;i<nth && x!=-1;++i){ prev=x; x=orders_get(x).next; }
+            if(x==-1){ cout<<-1<<'\n'; return;} Order &o=orders_get_mut(x); if(o.status==2){ cout<<-1<<'\n'; return;} Train &t=trains_get(o.trainIdx); if(o.status==1){ // success -> refund seats
                 seats_add(t,o.baseStartDay,o.fromIdx,o.toIdx-1,o.num);
             } else if(o.status==0) {
                 // remove from pending queue
                 int di=o.baseStartDay - t.saleStart; int cur=t.pendHead[di], prevq=-1; while(cur!=-1){ if(cur==x){ int nxt=orders_get_mut(cur).nextPending; if(prevq==-1) t.pendHead[di]=nxt; else orders_get_mut(prevq).nextPending=nxt; if(t.pendTail[di]==cur) t.pendTail[di]=prevq; break;} prevq=cur; cur=orders_get(cur).nextPending; }
             }
-            o.status=2; cout<<0<<'\n';
+            o.status=2; if(!fromLog) append_log(line); cout<<0<<'\n';
             if(o.status==2){ process_pending_for_day(t,o.baseStartDay); }
 
         } else if(cmd=="clean"){
-            users_init(); trains_init(); orders_init(50000); cout<<0<<'\n';
+            users_init(); trains_init(); orders_init(50000); if(!fromLog){ remove("ops.log"); } cout<<0<<'\n';
         } else if(cmd=="exit"){
-            cout<<"bye\n"; return 0;
+            if(fromLog) return; cout<<"bye\n"; exit(0);
         }
+}
+
+static void replay_log(){
+    FILE *f=fopen("ops.log","rb"); if(!f) return; std::ofstream devnull("/dev/null"); std::streambuf *oldbuf = cout.rdbuf(devnull.rdbuf());
+    string line; int c; while(true){ line.clear(); while((c=fgetc(f))!=EOF){ if(c=='\n') break; line.push_back((char)c);} if(line.size()) handle_line(line,true); if(c==EOF) break; }
+    cout.rdbuf(oldbuf); fclose(f);
+}
+
+int main(){ios::sync_with_stdio(false);cin.tie(nullptr);
+    users_init(); trains_init(); orders_init(50000);
+    replay_log();
+    string line; while (getline(cin,line)){
+        if(line.empty()) continue; if(line[0]=='>'){/*ignore prompt*/}
+        handle_line(line,false);
     }
     return 0;
 }

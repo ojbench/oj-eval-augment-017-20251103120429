@@ -1,0 +1,4 @@
+add_user -u u1 -p p1 -n N -m a@b.com
+add_train -i T1 -n 2 -m 5 -s A|B -p 3 -x 08:00 -t 60 -o _ -d 06-01|06-01 -y G
+release_train -i T1
+buy_ticket -u u1 -i T1 -d 06-01 -n 2 -f A -t B
