@@ -1,0 +1,11 @@
+cmake_minimum_required(VERSION 3.10)
+project(code_proj CXX)
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+add_executable(code main.cpp util.cpp user.cpp train.cpp order.cpp)
+set_target_properties(code PROPERTIES OUTPUT_NAME "code")
+if (NOT CMAKE_BUILD_TYPE)
+  set(CMAKE_BUILD_TYPE Release)
+endif()
+add_compile_options(-O2 -pipe -static-libstdc++)
+
